@@ -296,19 +296,17 @@
         let instructionsPlane = null;
         let currentOpacity = 0.75;
         let currentScale = 1.0;
-        let previousDidPressHideImage = false;
-        let previousDidPressHideInstructions = false;
         let tracingComplete = false;
         let isInVR = false;
 
         // Preloaded image paths
-       const phobiaImages = {
-    water: './images/phobias/water.png',
-    spider: './images/phobias/spider.png',
-    height: './images/phobias/height.png',
-    crowd: './images/phobias/crowd.png',
-    confined: './images/phobias/confined.png'
-};
+        const phobiaImages = {
+            water: './images/phobias/water.png',
+            spider: './images/phobias/spider.png',
+            height: './images/phobias/height.png',
+            crowd: './images/phobias/crowd.png',
+            confined: './images/phobias/confined.png'
+        };
 
         init();
         setupEventListeners();
@@ -347,6 +345,14 @@
             group.position.set(0, 0, -0.5);
             scene.add(group);
 
+            // Load selected phobia from URL
+            const urlParams = new URLSearchParams(window.location.search);
+            const selectedPhobia = urlParams.get('phobia');
+            if (selectedPhobia) {
+                document.getElementById('phobiaSelect').value = selectedPhobia;
+                loadPhobiaImage(selectedPhobia);
+            }
+
             window.addEventListener('resize', onWindowResize);
         }
 
@@ -371,10 +377,10 @@
                 if (selectedPhobia) {
                     const currentUrl = new URL(window.location.href);
                     currentUrl.searchParams.set('phobia', selectedPhobia);
-                    
+
                     const questUrl = new URL('https://oculus.com/open_url/');
                     questUrl.searchParams.set('url', currentUrl.toString());
-                    
+
                     window.location.href = questUrl.toString();
                 }
             });
@@ -473,11 +479,8 @@
         }
 
         function checkTracingCompletion() {
-            // Only show completion in VR mode
             if (!isInVR) return;
 
-            // This is a placeholder for tracing completion logic
-            // You would implement actual tracing detection here
             if (!tracingComplete && Math.random() < 0.1) { // Simulated completion
                 tracingComplete = true;
                 document.getElementById('successMessage').style.display = 'block';
@@ -539,11 +542,13 @@
                 else if (horizontal < -0.7) incrementOpacity(-1.0 * elapsedTime);
 
                 if (triggerButton.pressed) {
-                    // Here you would implement the actual tracing logic
-                    // For now, we're just using the simulated completion check
+                    const controllerToUse = renderer.xr.getController(0);
+                    const offsetPosition = controllerToUse.localToWorld(new THREE.Vector3(0, 0, 0.045));
+                    group.position.copy(offsetPosition);
+                    group.setRotationFromQuaternion(controllerToUse.quaternion);
                 }
             }
         }
         </script>
     </body>
-</html> 
+</html>
