@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <title>Phobia Tracing VR</title>
+        <meta charset="utf-8">
+        <style>
+        body { 
+            margin: 0; 
+            background-color: #f0fdf4; /* green-50 */
+            font-family: system-ui, -apple-system, sans-serif;
+        }
+
+        .popupWindow {
+            position: fixed;
+            top: 12.5%;
+            left: 50%;
+            transform: translate(-50%, -12.5%);
+            background-color: white;
+            border-radius: 0.5rem;
+            color: #166534; /* green-800 */
+            overflow: hidden;
+            min-width: 400px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        .popupHeader {
+            background-color: #166534; /* green-800 */ 
+            padding: 1rem;
+            text-align: center;
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: white;
+        }
+
+        .popupSection {
+            padding: 1.5rem;
+            background-color: white;
+            border-bottom: 1px solid #dcfce7; /* green-100 */
+        }
+
+        .popupSection:last-child {
+            border-bottom: none;
+        }
+
+        select {
+            width: 100%;
+            padding: 0.75rem;
+            margin: 0.5rem 0;
+            border-radius: 0.5rem;
+            background-color: #f0fdf4; /* green-50 */
+            color: #166534; /* green-800 */
+            border: 1px solid #86efac; /* green-300 */
+            font-size: 1rem;
+        }
+
+        select:focus {
+            outline: none;
+            border-color: #22c55e; /* green-500 */
+            box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2);
+        }
+
+        .button {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1.5rem;
+            background-color: #16a34a; /* green-600 */
+            color: white;
+            text-decoration: none;
+            border-radius: 0.5rem;
+            font-weight: 500;
+            border: none;
+            cursor: pointer;
+            transition: all 200ms;
+        }
+
+        .button:hover {
+            background-color: #15803d; /* green-700 */
+        }
+
+        .success-message {
+            display: none;
+            background-color: #22c55e; /* green-500 */
+            color: white;
+            padding: 1rem;
+            margin-top: 1rem;
+            border-radius: 0.5rem;
+            text-align: center;
+            font-weight: 500;
+        }
+
+        .next-button {
+            display: none;
+            width: 100%;
+            padding: 0.75rem;
+            background-color: #16a34a; /* green-600 */
+            color: white;
+            border: none;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            font-weight: 500;
+            margin-top: 1rem;
+            transition: all 200ms;
+        }
+
+        .next-button:hover {
+            background-color: #15803d; /* green-700 */
+        }
+
+        .phobia-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .phobia-item {
+            padding: 0.75rem;
+            background-color: #f0fdf4; /* green-50 */
+            border-radius: 0.5rem;
+            text-align: center;
+        }
+
+        .phobia-icon {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+            display: block;
+        }
+
+        .phobia-name {
+            font-size: 0.875rem;
+            color: #15803d; /* green-700 */
+        }
+
+        .button-group {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .instructions {
+            color: #166534; /* green-800 */
+            line-height: 1.5;
+            margin-bottom: 1rem;
+        }
+
+        .instructions strong {
+            color: #15803d; /* green-700 */
+        }
+        </style>
+    </head>
+    <body>
+        <!-- Import maps polyfill -->
+        <script async src="https://unpkg.com/es-module-shims@1.3.6/dist/es-module-shims.js"></script>
+
+        <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.147.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.147.0/examples/jsm/",
+                "three-mesh-ui": "https://unpkg.com/three-mesh-ui@6.5.2/build/three-mesh-ui.module.js"
+            }
+        }
+        </script>
+
+        <script type="x-shader/x-vertex" id="vertexshader">
+        varying vec2 vUv;
+
+        void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+        </script>
+
+        <script type="x-shader/x-fragment" id="fragmentshader">
+        uniform sampler2D colorTexture;
+        uniform float opacity;
+        float stepSize = 2.0;
+
+        varying vec2 vUv;
+
+        float intensity(in vec4 color) {
+            return sqrt((color.x*color.x)+(color.y*color.y)+(color.z*color.z));
+        }
+
+        void main() {
+            vec2 uv = vUv;
+            
+            ivec2 imageSize = textureSize(colorTexture, 0);
+            vec2 step = vec2(stepSize/float(imageSize.x), stepSize/float(imageSize.y));
+
+            float topLeft     = intensity(texture2D(colorTexture, uv + vec2(-step.x, step.y)));
+            float left       = intensity(texture2D(colorTexture, uv + vec2(-step.x, 0)));
+            float bottomLeft = intensity(texture2D(colorTexture, uv + vec2(-step.x, -step.y)));
+            float top        = intensity(texture2D(colorTexture, uv + vec2(0, step.y)));
+            float bottom     = intensity(texture2D(colorTexture, uv + vec2(0, -step.y)));
+            float topRight   = intensity(texture2D(colorTexture, uv + vec2(step.x, step.y)));
+            float right      = intensity(texture2D(colorTexture, uv + vec2(step.x, 0)));
+            float bottomRight = intensity(texture2D(colorTexture, uv + vec2(step.x, -step.y)));
+         
+            float horizontal = topLeft + 2.0 * left + bottomLeft - topRight - 2.0 * right - bottomRight;
+            float vertical = -topLeft - 2.0 * top - topRight + bottomLeft + 2.0 * bottom + bottomRight;
+
+            float sobelResult = sqrt(horizontal * horizontal + vertical * vertical);
+
+            vec4 sobelColor = vec4(1.0 - sobelResult, 1.0 - sobelResult, 1.0 - sobelResult, sobelResult);
+            vec4 currentColor = texture2D(colorTexture, uv);
+
+            float smoothOpacity = smoothstep(0.0, 0.3, opacity);
+
+            gl_FragColor = vec4(
+                currentColor.x * smoothOpacity + (1.0 - smoothOpacity) * sobelColor.x,
+                currentColor.y * smoothOpacity + (1.0 - smoothOpacity) * sobelColor.y,
+                currentColor.z * smoothOpacity + (1.0 - smoothOpacity) * sobelColor.z,
+                currentColor.w * min(opacity, smoothOpacity) + (1.0 - smoothOpacity) * sobelColor.w
+            );
+        }
+        </script>
+
+        <div id="container"></div>
+
+        <div class="popupWindow">
+            <div class="popupHeader">Phobia Tracing VR</div>
+            <div class="popupSection">
+                <div class="instructions">
+                    <strong>Instructions:</strong><br/>
+                    1. Select a phobia category from the dropdown below<br/>
+                    2. Click "Start VR Session" to begin in VR<br/>
+                    3. Use your VR controller to trace the outline carefully
+                </div>
+                <select id="phobiaSelect">
+                    <option value="">Select a phobia to trace...</option>
+                    <option value="water">Water Body (Hydrophobia)</option>
+                    <option value="spider">Spider (Arachnophobia)</option>
+                    <option value="height">Heights (Acrophobia)</option>
+                    <option value="crowd">Crowds (Agoraphobia)</option>
+                    <option value="confined">Confined Spaces (Claustrophobia)</option>
+                </select>
+                <div class="phobia-grid">
+                    <div class="phobia-item">
+                        <span class="phobia-icon">💧</span>
+                        <span class="phobia-name">Hydrophobia</span>
+                    </div>
+                    <div class="phobia-item">
+                        <span class="phobia-icon">🕷️</span>
+                        <span class="phobia-name">Arachnophobia</span>
+                    </div>
+                    <div class="phobia-item">
+                        <span class="phobia-icon">🏔️</span>
+                        <span class="phobia-name">Acrophobia</span>
+                    </div>
+                    <div class="phobia-item">
+                        <span class="phobia-icon">👥</span>
+                        <span class="phobia-name">Agoraphobia</span>
+                    </div>
+                    <div class="phobia-item">
+                        <span class="phobia-icon">📦</span>
+                        <span class="phobia-name">Claustrophobia</span>
+                    </div>
+                </div>
+            </div>
+            <div class="popupSection">
+                <div class="button-group">
+                    <button id="startButton" class="button">
+                        <span>Start VR Session</span>
+                        <svg class="w-5 h-5" width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                        </svg>
+                    </button>
+                    <button id="sendToQuest" class="button">
+                        <span>Send to Meta Quest</span>
+                        <svg class="w-5 h-5" width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                        </svg>
+                    </button>
+                </div>
+                <div id="successMessage" class="success-message">
+                    Tracing completed successfully in VR!
+                </div>
+                <button id="nextButton" class="next-button">Next Exercise</button>
+            </div>
+        </div>
+
+        <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { ARButton } from 'three/addons/webxr/ARButton.js';
+        import ThreeMeshUI from 'three-mesh-ui';
+
+        let container;
+        let camera, scene, renderer;
+        let controller1, controller2;
+        let clock;
+        let group = null;
+        let imagePlane = null;
+        let instructionsPlane = null;
+        let currentOpacity = 0.75;
+        let currentScale = 1.0;
+        let previousDidPressHideImage = false;
+        let previousDidPressHideInstructions = false;
+        let tracingComplete = false;
+        let isInVR = false;
+
+        // Preloaded image paths
+        const phobiaImages = {
+            water: '/images/phobias/water.png',
+            spider: '/images/phobias/spider.png',
+            height: '/images/phobias/height.png',
+            crowd: '/images/phobias/crowd.png',
+            confined: '/images/phobias/confined.png'
+        };
+
+        init();
+        setupEventListeners();
+
+        function init() {
+            container = document.getElementById("container");
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 10);
+            camera.position.set(0, 0, 1);
+
+            const controls = new OrbitControls(camera, container);
+            controls.minDistance = 0;
+            controls.maxDistance = 8;
+
+            clock = new THREE.Clock();
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.outputEncoding = THREE.sRGBEncoding;
+            renderer.localClippingEnabled = true;
+            renderer.xr.enabled = true;
+            renderer.xr.setFoveation(0);
+            container.appendChild(renderer.domElement);
+
+            controller1 = renderer.xr.getController(0);
+            scene.add(controller1);
+
+            controller2 = renderer.xr.getController(1);
+            scene.add(controller2);
+
+            makeInstructionsUI();
+
+            const length = 0.25;
+            group = new THREE.Group();
+            group.position.set(0, 0, -0.5);
+            scene.add(group);
+
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function setupEventListeners() {
+            const startButton = document.getElementById('startButton');
+            const sendToQuestButton = document.getElementById('sendToQuest');
+            const phobiaSelect = document.getElementById('phobiaSelect');
+
+            startButton.addEventListener('click', () => {
+                const selectedPhobia = phobiaSelect.value;
+                if (selectedPhobia) {
+                    document.body.appendChild(ARButton.createButton(renderer, {
+                        optionalFeatures: ['local-floor', 'bounded-floor']
+                    }));
+                    loadPhobiaImage(selectedPhobia);
+                    animate();
+                }
+            });
+
+            sendToQuestButton.addEventListener('click', () => {
+                const selectedPhobia = phobiaSelect.value;
+                if (selectedPhobia) {
+                    const currentUrl = new URL(window.location.href);
+                    currentUrl.searchParams.set('phobia', selectedPhobia);
+                    
+                    const questUrl = new URL('https://oculus.com/open_url/');
+                    questUrl.searchParams.set('url', currentUrl.toString());
+                    
+                    window.location.href = questUrl.toString();
+                }
+            });
+
+            // Listen for VR session start
+            renderer.xr.addEventListener('sessionstart', () => {
+                isInVR = true;
+            });
+
+            // Listen for VR session end
+            renderer.xr.addEventListener('sessionend', () => {
+                isInVR = false;
+            });
+        }
+
+        function loadPhobiaImage(phobiaType) {
+            const imagePath = phobiaImages[phobiaType];
+            if (!imagePath) return;
+
+            const length = 0.25;
+            loadTexture(group, length, imagePath);
+        }
+
+        function makeInstructionsUI() {
+            const textContainer = new ThreeMeshUI.Block({
+                borderRadius: 0.05,
+                width: 0.45,
+                height: 0.60,
+                padding: 0.05,
+                textAlign: 'left',
+                fontKerning: 'none',
+                whiteSpace: 'pre-wrap',
+                fontFamily: 'https://unpkg.com/three-mesh-ui@6.5.2/examples/assets/Roboto-msdf.json',
+                fontTexture: 'https://unpkg.com/three-mesh-ui@6.5.2/examples/assets/Roboto-msdf.png'
+            });
+
+            textContainer.rotation.y = -45.0 * (Math.PI/180.0);
+            textContainer.position.set(0.5, 0, -0.5);
+
+            textContainer.add(
+                new ThreeMeshUI.Text({
+                    content: "Tracing Instructions\n",
+                    fontSize: 0.04,
+                    fontColor: new THREE.Color(0xffff00)
+                }),
+                new ThreeMeshUI.Text({
+                    content: "\nTrace the outline carefully\nUse controller trigger to draw\nComplete the entire shape",
+                    fontSize: 0.025,
+                    fontColor: new THREE.Color(0xffffff)
+                })
+            );
+
+            scene.add(textContainer);
+            instructionsPlane = textContainer;
+        }
+
+        function loadTexture(container, length, url) {
+            const loader = new THREE.TextureLoader();
+            loader.load(
+                url,
+                function (texture) {
+                    let originalWidth = texture.image.width;
+                    let originalHeight = texture.image.height;
+
+                    let max = Math.max(originalWidth, originalHeight);
+                    let width = (originalWidth/max) * length;
+                    let height = (originalHeight/max) * length;
+
+                    const geometry = new THREE.PlaneGeometry(width, height);
+
+                    texture.generateMipmaps = false;
+
+                    const sobelMaterial = new THREE.ShaderMaterial({
+                        transparent: true,
+                        side: THREE.DoubleSide,
+                        uniforms: {
+                            colorTexture: { value: texture },
+                            opacity: { value: currentOpacity }
+                        },
+                        vertexShader: document.getElementById('vertexshader').textContent,
+                        fragmentShader: document.getElementById('fragmentshader').textContent
+                    });
+
+                    if (imagePlane) {
+                        container.remove(imagePlane);
+                    }
+
+                    imagePlane = new THREE.Mesh(geometry, sobelMaterial);
+                    container.add(imagePlane);
+                },
+                undefined,
+                function (err) {
+                    console.error("Error loading image:", err);
+                }
+            );
+        }
+
+        function checkTracingCompletion() {
+            // Only show completion in VR mode
+            if (!isInVR) return;
+
+            // This is a placeholder for tracing completion logic
+            // You would implement actual tracing detection here
+            if (!tracingComplete && Math.random() < 0.1) { // Simulated completion
+                tracingComplete = true;
+                document.getElementById('successMessage').style.display = 'block';
+                document.getElementById('nextButton').style.display = 'block';
+            }
+        }
+
+        function incrementOpacity(delta) {
+            currentOpacity += delta;
+            currentOpacity = Math.min(Math.max(currentOpacity, 0.0), 1.0);
+            if (imagePlane) {
+                imagePlane.material.uniforms["opacity"].value = currentOpacity;
+            }
+        }
+
+        function incrementScale(delta) {
+            currentScale += delta;
+            currentScale = Math.min(Math.max(currentScale, 0.0), 4.0);
+            if (group) {
+                group.scale.set(currentScale, currentScale, currentScale);
+            }
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            renderer.setAnimationLoop(loop);
+        }
+
+        function loop() {
+            updateInput();
+            ThreeMeshUI.update();
+            renderer.render(scene, camera);
+            checkTracingCompletion();
+        }
+
+        function updateInput() {
+            const xrSession = renderer.xr.getSession();
+            const elapsedTime = clock.getDelta();
+
+            if (!xrSession || xrSession.inputSources.length <= 0) return;
+
+            for (const input of xrSession.inputSources) {
+                const gamepad = input.gamepad;
+                if (!gamepad || gamepad.mapping !== "xr-standard") continue;
+
+                const horizontal = gamepad.axes[2];
+                const vertical = gamepad.axes[3];
+                const triggerButton = gamepad.buttons[0];
+
+                if (vertical > 0.7) incrementScale(-1.0 * elapsedTime);
+                else if (vertical < -0.7) incrementScale(1.0 * elapsedTime);
+
+                if (horizontal > 0.7) incrementOpacity(1.0 * elapsedTime);
+                else if (horizontal < -0.7) incrementOpacity(-1.0 * elapsedTime);
+
+                if (triggerButton.pressed) {
+                    // Here you would implement the actual tracing logic
+                    // For now, we're just using the simulated completion check
+                }
+            }
+        }
+        </script>
+    </body>
+</html> 
